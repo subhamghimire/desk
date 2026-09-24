@@ -1,0 +1,11 @@
+/* Structural styles for skill-page trainers. Colours come from the subject stylesheet's tokens. */
+.t-trainer { border-top: 1px solid var(--rule, #ddd); }
+.t-trainer summary { cursor: pointer; padding: 0.8rem 0; list-style: none; }
+.t-trainer summary::-webkit-details-marker { display: none; }
+.t-trainer-title { font-weight: 600; }
+.t-trainer-origin { display: block; color: var(--muted, #666); font-size: 0.85rem; margin-top: 0.15rem; }
+.t-trainer-body { padding: 0 0 1.2rem; }
+.t-trainer-blurb, .t-trainer-from { margin: 0 0 0.8rem; }
+.t-stage { min-height: 2rem; }
+.t-trainer-error { color: var(--bad, #c92a2a); }
+.t-back { margin: 0 0 1rem; font-size: 0.9rem; }

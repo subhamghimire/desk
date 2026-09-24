@@ -1,0 +1,708 @@
+#!/usr/bin/env python3
+"""
+lessons — track and open whatever teaching material is currently live.
+
+Every subject under ./teaching/ (music-theory, reading, …) holds lessons and
+reference docs as HTML. This tracks which of them are ACTIVE — meaning "open
+this when I sit down to study" — so you never have to remember which file to
+dig out of which folder.
+
+Usage
+-----
+  lessons                 open every active item in the browser
+  lessons ls              list everything, no browser
+  lessons ui              interactive picker — toggle, open, browse
+  lessons set <frag> <active|done> [--note "..."]
+                          set status; <frag> is any unique path fragment,
+                          e.g. `lessons set reading/0001 done`
+  lessons tools           list every subject's tools
+  lessons tools <frag>    open one tool, e.g. `lessons tools rhythm`
+  lessons --help
+
+State lives in ./teaching/state.json and holds nothing but status. Titles and
+the item list are read from the filesystem every run, so new lessons appear
+automatically and deleted ones disappear — the state file can never drift out
+of sync with reality.
+
+Items not mentioned in state.json default to: lessons ACTIVE (a lesson that
+exists but was never marked is assumed to be the live one), references DONE.
+
+Tools (./<subject>/tools/) are stateless: always there to reach for, never
+active or done, never in state.json. Only `lessons tools` knows about them.
+"""
+
+import html
+import json
+import os
+import re
+import select
+import subprocess
+import sys
+import tempfile
+from datetime import date
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+STATE_PATH = os.path.join(HERE, "state.json")
+KIND_DIRS = (("lessons", "lesson"), ("reference", "ref"), ("projects", "project"))
+# Deliberately NOT a KIND_DIR: tools carry no state (docs/adr/0002-tools-are-stateless.md).
+TOOLS_DIR = "tools"
+
+ACTIVE, DONE = "active", "done"
+
+# ---------------------------------------------------------------- colour ----
+
+_TTY = sys.stdout.isatty()
+
+
+def c(code, s):
+    return f"\033[{code}m{s}\033[0m" if _TTY else s
+
+
+def dim(s):
+    return c("2", s)
+
+
+def bold(s):
+    return c("1", s)
+
+
+def green(s):
+    return c("32", s)
+
+
+def cyan(s):
+    return c("36", s)
+
+
+# ----------------------------------------------------------------- model ----
+
+
+class Item:
+    __slots__ = ("subject", "rel", "kind", "title", "status", "note", "sort")
+
+    def __init__(self, subject, rel, kind, title, status, note, sort):
+        self.subject = subject
+        self.rel = rel
+        self.kind = kind
+        self.title = title
+        self.status = status
+        self.note = note
+        self.sort = sort
+
+    @property
+    def key(self):
+        return f"{self.subject}/{self.rel}"
+
+    @property
+    def path(self):
+        return os.path.join(HERE, self.subject, self.rel)
+
+
+def load_state():
+    try:
+        with open(STATE_PATH, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except FileNotFoundError:
+        return {"version": 1, "items": {}}
+    except (json.JSONDecodeError, OSError) as exc:
+        sys.stderr.write(f"lessons: could not read state.json ({exc})\n")
+        sys.stderr.write("lessons: continuing with defaults; nothing was overwritten.\n")
+        return {"version": 1, "items": {}, "_readonly": True}
+    data.setdefault("version", 1)
+    data.setdefault("items", {})
+    return data
+
+
+def save_state(state):
+    if state.get("_readonly"):
+        sys.stderr.write("lessons: refusing to overwrite an unreadable state.json\n")
+        return False
+    payload = {k: v for k, v in state.items() if not k.startswith("_")}
+    payload["updated"] = date.today().isoformat()
+    # Write to a temp file in the same dir, then rename — an interrupted run
+    # can never leave a half-written state.json behind.
+    fd, tmp = tempfile.mkstemp(dir=HERE, prefix=".state-", suffix=".json")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump(payload, fh, indent=2, ensure_ascii=False)
+            fh.write("\n")
+        os.replace(tmp, STATE_PATH)
+    except OSError as exc:
+        sys.stderr.write(f"lessons: could not write state.json ({exc})\n")
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+        return False
+    return True
+
+
+TITLE_RE = re.compile(r"<title[^>]*>(.*?)</title>", re.I | re.S)
+
+
+def read_title(path, fallback):
+    if not path.endswith(".html"):
+        return fallback
+    try:
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            head = fh.read(4096)
+    except OSError:
+        return fallback
+    m = TITLE_RE.search(head)
+    if not m:
+        return fallback
+    return html.unescape(" ".join(m.group(1).split()))
+
+
+def subjects():
+    out = []
+    for name in sorted(os.listdir(HERE)):
+        full = os.path.join(HERE, name)
+        if not os.path.isdir(full) or name.startswith("."):
+            continue
+        dirs = [d for d, _ in KIND_DIRS] + [TOOLS_DIR]
+        if any(os.path.isdir(os.path.join(full, d)) for d in dirs):
+            out.append(name)
+    return out
+
+
+ITEM_EXTS = (".html", ".pdf")
+
+
+def html_files(base):
+    """(path relative to base, absolute path) for .html/.pdf files directly
+    inside base, plus one level down. The nesting is what lets a kind dir hold
+    a folder per project: projects/<slug>/0001-step.html"""
+    out = []
+    for entry in sorted(os.listdir(base)):
+        if entry.startswith("."):
+            continue
+        full = os.path.join(base, entry)
+        if os.path.isfile(full) and entry.endswith(ITEM_EXTS):
+            out.append((entry, full))
+        elif os.path.isdir(full):
+            for sub in sorted(os.listdir(full)):
+                if sub.startswith(".") or not sub.endswith(ITEM_EXTS):
+                    continue
+                subfull = os.path.join(full, sub)
+                if os.path.isfile(subfull):
+                    out.append((entry + "/" + sub, subfull))
+    return out
+
+
+def scan(state):
+    """Filesystem is the source of truth for what exists; state.json only says
+    which of those things are live."""
+    items = state.get("items", {})
+    found = []
+    for subject in subjects():
+        for dirname, kind in KIND_DIRS:
+            d = os.path.join(HERE, subject, dirname)
+            if not os.path.isdir(d):
+                continue
+            for relname, full in html_files(d):
+                rel = f"{dirname}/{relname}"
+                key = f"{subject}/{rel}"
+                rec = items.get(key, {})
+                default = DONE if kind == "ref" else ACTIVE
+                status = rec.get("status", default)
+                if status not in (ACTIVE, DONE):
+                    status = default
+                fname = os.path.basename(relname)
+                title = read_title(full, fname)
+                # Numeric prefix sorts lessons newest-first; refs sort by name.
+                m = re.match(r"(\d+)", fname)
+                sort = int(m.group(1)) if m else 0
+                found.append(
+                    Item(subject, rel, kind, title, status, rec.get("note", ""), sort)
+                )
+    return found
+
+
+def scan_tools():
+    """Every subject's tools, newest first. Tools are stateless, so this never
+    reads state.json and nothing here ever shows up in scan()."""
+    found = []
+    for subject in subjects():
+        d = os.path.join(HERE, subject, TOOLS_DIR)
+        if not os.path.isdir(d):
+            continue
+        for relname, full in html_files(d):
+            fname = os.path.basename(relname)
+            m = re.match(r"(\d+)", fname)
+            found.append(
+                Item(subject, f"{TOOLS_DIR}/{relname}", "tool", read_title(full, fname),
+                     "", "", int(m.group(1)) if m else 0)
+            )
+    found.sort(key=lambda t: (t.subject, -t.sort, t.title))
+    return found
+
+
+def order(items):
+    """Active first, then newest lesson number first. Subjects are ordered by
+    whichever has live work, so what you're studying floats to the top."""
+    by_subject = {}
+    for it in items:
+        by_subject.setdefault(it.subject, []).append(it)
+    for group in by_subject.values():
+        group.sort(key=lambda i: (i.status != ACTIVE, i.kind != "lesson", -i.sort, i.title))
+
+    def subject_rank(name):
+        group = by_subject[name]
+        live = sum(1 for i in group if i.status == ACTIVE)
+        newest = max((i.sort for i in group if i.status == ACTIVE), default=0)
+        return (0 if live else 1, -newest, name)
+
+    out = []
+    for name in sorted(by_subject, key=subject_rank):
+        out.append((name, by_subject[name]))
+    return out
+
+
+def open_paths(paths):
+    existing = [p for p in paths if os.path.exists(p)]
+    if not existing:
+        return 0
+    try:
+        subprocess.run(["open"] + existing, check=True)
+    except (OSError, subprocess.CalledProcessError) as exc:
+        sys.stderr.write(f"lessons: could not open files ({exc})\n")
+        return 0
+    return len(existing)
+
+
+# -------------------------------------------------------------- commands ----
+
+
+def cmd_open(_args):
+    state = load_state()
+    items = scan(state)
+    active = [i for i in items if i.status == ACTIVE]
+    if not active:
+        print("No active lessons.")
+        print(dim("  Mark something active with:  lessons ui"))
+        return 0
+    for subject, group in order(active):
+        print(bold(subject))
+        for it in group:
+            print(f"  {green('●')} {it.title}")
+    n = open_paths([i.path for i in active])
+    print()
+    print(dim(f"opened {n} item{'s' if n != 1 else ''}"))
+    return 0
+
+
+def cmd_ls(_args):
+    state = load_state()
+    items = scan(state)
+    if not items:
+        print("No lessons found under", HERE)
+        return 0
+    total = sum(1 for i in items if i.status == ACTIVE)
+    print(bold("Lessons"), dim(f"— {total} active"))
+    for subject, group in order(items):
+        print()
+        print(bold(subject.upper()))
+        for it in group:
+            mark = green("●") if it.status == ACTIVE else dim("○")
+            title = it.title if it.status == ACTIVE else dim(it.title)
+            tag = dim(f"[{it.kind}]")
+            print(f"  {mark} {title} {tag}")
+            if it.note:
+                print(f"    {dim('↳ ' + it.note)}")
+    print()
+    print(dim("lessons        open all active     lessons ui     toggle / browse"))
+    return 0
+
+
+def resolve(items, frag):
+    """Match on all whitespace/slash-separated tokens, so `reading/0002`,
+    `reading 0002` and `residue` all find the same thing."""
+    tokens = [t for t in re.split(r"[\s/]+", frag.strip().lower()) if t]
+    if not tokens:
+        return []
+
+    def hit(hay):
+        return all(t in hay for t in tokens)
+
+    found = [i for i in items if hit(i.key.lower())]
+    if not found:
+        found = [i for i in items if hit(i.title.lower())]
+    return found
+
+
+def cmd_set(args):
+    if len(args) < 2:
+        sys.stderr.write("usage: lessons set <fragment> <active|done> [--note \"...\"]\n")
+        return 2
+    frag, status = args[0], args[1].lower()
+    if status not in (ACTIVE, DONE):
+        sys.stderr.write(f"lessons: status must be 'active' or 'done', got '{status}'\n")
+        return 2
+    note = None
+    if "--note" in args:
+        idx = args.index("--note")
+        if idx + 1 < len(args):
+            note = args[idx + 1]
+
+    state = load_state()
+    items = scan(state)
+    hits = resolve(items, frag)
+    if not hits:
+        sys.stderr.write(f"lessons: nothing matches '{frag}'\n")
+        return 1
+    if len(hits) > 1:
+        sys.stderr.write(f"lessons: '{frag}' is ambiguous:\n")
+        for h in hits:
+            sys.stderr.write(f"  {h.key}\n")
+        return 1
+
+    it = hits[0]
+    rec = state["items"].setdefault(it.key, {})
+    rec["status"] = status
+    rec["updated"] = date.today().isoformat()
+    if note is not None:
+        if note:
+            rec["note"] = note
+        else:
+            rec.pop("note", None)
+    if not save_state(state):
+        return 1
+    mark = green("● active") if status == ACTIVE else dim("○ done")
+    print(f"{mark}  {it.title}")
+    return 0
+
+
+def cmd_tools(args):
+    tools = scan_tools()
+    if not args:
+        if not tools:
+            print("No tools found under", HERE)
+            return 0
+        print(bold("Tools"), dim(f"— {len(tools)}"))
+        subject = None
+        for it in tools:
+            if it.subject != subject:
+                subject = it.subject
+                print()
+                print(bold(subject.upper()))
+            print(f"  {cyan('◆')} {it.title}")
+        print()
+        print(dim("lessons tools <frag>    open one"))
+        return 0
+
+    frag = " ".join(args)
+    hits = resolve(tools, frag)
+    if not hits:
+        sys.stderr.write(f"lessons: no tool matches '{frag}'\n")
+        return 1
+    if len(hits) > 1:
+        sys.stderr.write(f"lessons: '{frag}' is ambiguous:\n")
+        for h in hits:
+            sys.stderr.write(f"  {h.key}\n")
+        return 1
+    if not open_paths([hits[0].path]):
+        return 1
+    print(f"{cyan('◆')} {hits[0].title}")
+    return 0
+
+
+# ------------------------------------------------------------------- TUI ----
+
+
+class AltScreen:
+    """Draw on the alternate screen buffer so the terminal's scrollback is
+    left exactly as it was. Restored on any exit path, including a crash —
+    otherwise the terminal is left looking frozen."""
+
+    def __enter__(self):
+        sys.stdout.write("\033[?1049h\033[?25l")  # alt screen, hide cursor
+        sys.stdout.flush()
+        return self
+
+    def __exit__(self, *_exc):
+        sys.stdout.write("\033[?25h\033[?1049l")  # show cursor, restore screen
+        sys.stdout.flush()
+        return False
+
+
+class RawInput:
+    """Put the terminal in cbreak for the whole session, not per keystroke.
+
+    Two things matter here. Use TCSANOW, not the TCSAFLUSH that tty.setraw
+    defaults to — TCSAFLUSH *discards* pending input, so any key pressed while
+    the screen was redrawing would be silently swallowed. And use cbreak rather
+    than raw, so output post-processing stays on and plain print() still
+    returns the carriage.
+    """
+
+    def __enter__(self):
+        import termios
+        import tty
+
+        self.termios = termios
+        self.fd = sys.stdin.fileno()
+        self.old = termios.tcgetattr(self.fd)
+        tty.setcbreak(self.fd, termios.TCSANOW)
+        return self
+
+    def __exit__(self, *_exc):
+        self.termios.tcsetattr(self.fd, self.termios.TCSADRAIN, self.old)
+        return False
+
+
+ARROWS = {"[A": "up", "[B": "down", "[C": "right", "[D": "left"}
+
+
+def getkey():
+    """Read one keypress.
+
+    Deliberately uses os.read rather than sys.stdin.read: the buffered reader
+    would swallow the rest of an escape sequence into its own buffer, leaving
+    select() looking at an empty file descriptor and every arrow key
+    misreported as a bare Escape (i.e. quit).
+    """
+    fd = sys.stdin.fileno()
+    ch = os.read(fd, 1)
+    if not ch:
+        return "q"  # stdin closed — don't spin
+    if ch != b"\033":
+        return ch.decode("utf-8", "replace")
+    # An arrow sends all its bytes at once, so nothing waiting means a real Escape.
+    if not select.select([fd], [], [], 0.05)[0]:
+        return "esc"
+    return ARROWS.get(os.read(fd, 2).decode("latin-1"), "esc")
+
+
+class Group:
+    """A collapsible subject heading within one of the two sections."""
+
+    __slots__ = ("section", "subject", "count")
+
+    def __init__(self, section, subject, count):
+        self.section = section
+        self.subject = subject
+        self.count = count
+
+    @property
+    def key(self):
+        return (self.section, self.subject)
+
+
+# Active groups start open (that's the list you came to see); done groups start
+# collapsed, so the archive stays out of the way however large it grows.
+SECTIONS = ((ACTIVE, "ACTIVE", False), (DONE, "DONE", True))
+
+
+def build_rows(items, collapsed):
+    """Flatten into ('section'|'group'|'item', payload) rows.
+
+    Sections come first and hold every subject, so all live work sits together
+    at the top rather than being buried under each subject's archive.
+    """
+    rows = []
+    for status, label, default_collapsed in SECTIONS:
+        subset = [i for i in items if i.status == status]
+        if not subset:
+            continue
+        rows.append(("section", (label, len(subset))))
+        for subject, group in order(subset):
+            grp = Group(label, subject, len(group))
+            is_collapsed = collapsed.setdefault(grp.key, default_collapsed)
+            rows.append(("group", grp))
+            if not is_collapsed:
+                for it in group:
+                    rows.append(("item", it))
+    return rows
+
+
+def navigable(rows, idx):
+    return 0 <= idx < len(rows) and rows[idx][0] in ("group", "item")
+
+
+def seek(rows, start, step):
+    """Next navigable row in a direction, or None if there isn't one."""
+    i = start + step
+    while 0 <= i < len(rows):
+        if navigable(rows, i):
+            return i
+        i += step
+    return None
+
+
+def first_nav(rows):
+    return next((i for i in range(len(rows)) if navigable(rows, i)), 0)
+
+
+def cmd_ui(_args):
+    if not sys.stdin.isatty():
+        sys.stderr.write("lessons: 'ui' needs an interactive terminal.\n")
+        return 2
+
+    state = load_state()
+    collapsed = {}  # (section, subject) -> bool. Session-only; not persisted.
+    items = scan(state)
+    if not items:
+        print("No lessons found under", HERE)
+        return 0
+
+    rows = build_rows(items, collapsed)
+    cursor = first_nav(rows)
+    message = ""
+
+    def refresh(keep_key=None):
+        """Rebuild after a change, keeping the cursor somewhere sensible."""
+        nonlocal rows, cursor, items
+        items = scan(state)
+        rows = build_rows(items, collapsed)
+        if keep_key is not None:
+            for i, (kind, payload) in enumerate(rows):
+                if kind == "item" and payload.key == keep_key:
+                    cursor = i
+                    return
+                if kind == "group" and payload.key == keep_key:
+                    cursor = i
+                    return
+        if not navigable(rows, cursor):
+            prev = seek(rows, cursor, -1)
+            cursor = prev if prev is not None else first_nav(rows)
+
+    with AltScreen(), RawInput():
+        while True:
+            sys.stdout.write("\033[2J\033[H")
+            live = sum(1 for i in items if i.status == ACTIVE)
+            print(bold("  Lessons"), dim(f"— {live} active"))
+
+            for i, (kind, payload) in enumerate(rows):
+                sel = i == cursor
+                cur = cyan("❯") if sel else " "
+
+                if kind == "section":
+                    label, count = payload
+                    print()
+                    tint = bold if label == "ACTIVE" else dim
+                    print(f"  {tint(label)} {dim(str(count))}")
+
+                elif kind == "group":
+                    caret = "▸" if collapsed.get(payload.key) else "▾"
+                    name = payload.subject.upper()
+                    name = bold(name) if payload.section == "ACTIVE" else dim(name)
+                    print(f" {cur} {dim(caret)} {name} {dim(str(payload.count))}")
+
+                else:
+                    it = payload
+                    mark = green("●") if it.status == ACTIVE else dim("○")
+                    title = it.title if it.status == ACTIVE else dim(it.title)
+                    print(f" {cur}     {mark} {title} {dim('[' + it.kind + ']')}")
+                    if it.note and sel:
+                        print(f"          {dim('↳ ' + it.note)}")
+
+            print()
+            print(dim("  ↑/↓ j/k  move   space  toggle / collapse   ←/→ h/l  fold"))
+            print(dim("  o  open   a  open all active   r  reload   q  quit"))
+            if message:
+                print()
+                print("  " + message)
+            sys.stdout.flush()
+
+            try:
+                key = getkey()
+            except (KeyboardInterrupt, EOFError):
+                break
+            message = ""
+
+            kind, payload = rows[cursor] if navigable(rows, cursor) else (None, None)
+
+            if key in ("q", "esc", "\x03"):
+                break
+
+            elif key in ("j", "down"):
+                nxt = seek(rows, cursor, 1)
+                if nxt is not None:
+                    cursor = nxt
+
+            elif key in ("k", "up"):
+                prv = seek(rows, cursor, -1)
+                if prv is not None:
+                    cursor = prv
+
+            elif key == " ":
+                if kind == "group":
+                    collapsed[payload.key] = not collapsed.get(payload.key)
+                    refresh(keep_key=payload.key)
+                elif kind == "item":
+                    new = DONE if payload.status == ACTIVE else ACTIVE
+                    rec = state["items"].setdefault(payload.key, {})
+                    rec["status"] = new
+                    rec["updated"] = date.today().isoformat()
+                    save_state(state)
+                    verb = green("→ active") if new == ACTIVE else dim("→ done")
+                    message = f"{payload.title}  {verb}"
+                    # Re-section it immediately; if the destination group is
+                    # collapsed the row vanishes, which is why we echo above.
+                    refresh(keep_key=payload.key)
+                    if not navigable(rows, cursor) or rows[cursor][0] != "item":
+                        nxt = seek(rows, cursor - 1, 1)
+                        cursor = nxt if nxt is not None else first_nav(rows)
+
+            elif key in ("l", "right"):
+                if kind == "group" and collapsed.get(payload.key):
+                    collapsed[payload.key] = False
+                    refresh(keep_key=payload.key)
+
+            elif key in ("h", "left"):
+                if kind == "group":
+                    collapsed[payload.key] = True
+                    refresh(keep_key=payload.key)
+                elif kind == "item":
+                    # Fold the group this item belongs to and jump to its header.
+                    for i in range(cursor, -1, -1):
+                        if rows[i][0] == "group":
+                            collapsed[rows[i][1].key] = True
+                            refresh(keep_key=rows[i][1].key)
+                            break
+
+            elif key in ("o", "\r", "\n"):
+                if kind == "item":
+                    open_paths([payload.path])
+                    message = dim(f"opened {payload.title}")
+                elif kind == "group":
+                    collapsed[payload.key] = not collapsed.get(payload.key)
+                    refresh(keep_key=payload.key)
+
+            elif key == "a":
+                paths = [i.path for i in items if i.status == ACTIVE]
+                n = open_paths(paths)
+                message = dim(f"opened {n} active item{'s' if n != 1 else ''}")
+
+            elif key == "r":
+                state = load_state()
+                refresh()
+                message = dim("reloaded")
+    return 0
+
+
+# ------------------------------------------------------------------ main ----
+
+COMMANDS = {"ls": cmd_ls, "list": cmd_ls, "ui": cmd_ui, "set": cmd_set, "open": cmd_open,
+            "tools": cmd_tools}
+
+
+def main(argv):
+    if argv and argv[0] in ("-h", "--help", "help"):
+        print(__doc__.strip())
+        return 0
+    if not argv:
+        return cmd_open([])
+    cmd = COMMANDS.get(argv[0])
+    if cmd is None:
+        sys.stderr.write(f"lessons: unknown command '{argv[0]}'\n")
+        sys.stderr.write("try: lessons --help\n")
+        return 2
+    return cmd(argv[1:])
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main(sys.argv[1:]))
+    except KeyboardInterrupt:
+        sys.stdout.write("\033[?25h\033[?1049l")
+        sys.exit(130)
