@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rows that meet should already share a slice</title>
+<link rel="stylesheet" href="../assets/redshift.css">
+<link rel="stylesheet" href="../../assets/teach.css">
+</head>
+<body>
+<article>
+  <h1>Rows that meet should already share a slice</h1>
+  <p class="lede">Lesson 1. The cost of a Redshift join is usually the copy that happens before the comparison.</p>
+
+  <p>A compute node is split into slices. Each slice owns its own rows and does its own work. A join compares a row from one table with a row from another. If those two rows live on different slices, Redshift copies data across the network first. That copy is called redistribution, or a broadcast when a whole table is sent everywhere.</p>
+
+  <p>Distribution is the rule that picks the slice:</p>
+  <ul>
+    <li><code>DISTKEY(col)</code> — rows with the same value of <code>col</code> land on the same slice.</li>
+    <li><code>DISTSTYLE EVEN</code> — rows are spread with no regard to values. Equal values do not meet.</li>
+    <li><code>DISTSTYLE ALL</code> — a full copy sits on every node, so nothing has to be fetched at query time.</li>
+    <li><code>DISTSTYLE AUTO</code> — Redshift chooses, and it can change. Read <code>diststyle</code> from <code>SVV_TABLE_INFO</code> before you trust a guess.</li>
+  </ul>
+
+  <h2>The move</h2>
+  <p>Join on the distribution key of the large table. If the other side uses the same key, the matching rows are already together and the plan says <code>DS_DIST_NONE</code>. If the other side is <code>ALL</code>, the plan says <code>DS_DIST_ALL_NONE</code>: still no copy at query time, because the copy happened when the table was loaded.</p>
+
+  <p>Join on anything else and the planner has to move rows. A small side may be broadcast (<code>DS_BCAST_INNER</code>). One or both large sides get redistributed (<code>DS_DIST_INNER</code>, <code>DS_DIST_BOTH</code>). The SQL result is the same. The cluster did extra work to make the rows meet.</p>
+
+  <pre>EXPLAIN
+SELECT o.order_id, c.email
+FROM orders o
+JOIN customers c ON c.customer_id = o.customer_id;</pre>
+
+  <p>Look at the join line, not the scan. <code>DS_DIST_NONE</code> or <code>DS_DIST_ALL_NONE</code> means this query respected the tables. Any other <code>DS_</code> label means rows moved. If <code>orders</code> and <code>customers</code> are both <code>DISTKEY(customer_id)</code>, the join above should not move them. The same tables joined on <code>o.email = c.email</code> should.</p>
+
+  <div class="q">
+    <p>Before the drill: <code>orders</code> is <code>DISTKEY(customer_id)</code>, <code>customers</code> is <code>DISTSTYLE ALL</code>. You join on <code>customer_id</code>. Do any rows move when the query runs?</p>
+  </div>
+
+  <h2>Check</h2>
+  <div id="check" class="quiz"></div>
+</article>
+<script src="../../assets/quiz.js"></script>
+<script>
+TEACH.quiz(document.getElementById("check"), {
+  items: [
+    {
+      id: "l1-same-key",
+      prompt: "orders and customers are both DISTKEY(customer_id). The join is ON c.customer_id = o.customer_id. What does the join do?",
+      choices: [
+        "No redistribution. Matching customer_ids already share a slice.",
+        "Broadcast customers to every slice.",
+        "Redistribute both tables on customer_id."
+      ],
+      answer: 0,
+      why: "Same dist key as the join column means the rows that match were placed together at load. EXPLAIN: DS_DIST_NONE."
+    },
+    {
+      id: "l1-other-column",
+      prompt: "Same two tables, both DISTKEY(customer_id). The join is ON c.email = o.email. What does the join do?",
+      choices: [
+        "No redistribution. Both tables are keyed, so any join is local.",
+        "Rows move. Equality of email was not the placement rule.",
+        "Nothing moves, because email is unique."
+      ],
+      answer: 1,
+      why: "DISTKEY only co-locates the column you named. A join on email still finds those rows on arbitrary slices, so the planner redistributes or broadcasts."
+    },
+    {
+      id: "l1-all",
+      prompt: "orders is DISTKEY(order_id). customers is DISTSTYLE ALL. Join ON c.customer_id = o.customer_id. What happens at query time?",
+      choices: [
+        "orders is redistributed onto customer_id.",
+        "No query-time copy. customers already exists on every node.",
+        "Both tables are broadcast."
+      ],
+      answer: 1,
+      why: "ALL paid for the copy at load. The join line should say DS_DIST_ALL_NONE. The fact table stays where it is."
+    },
+    {
+      id: "l1-even",
+      prompt: "orders and customers are both DISTSTYLE EVEN, and both are large. Join ON customer_id. What does the join do?",
+      choices: [
+        "No redistribution. EVEN spreads both tables the same way.",
+        "Rows move. EVEN does not keep equal customer_ids together.",
+        "Only customers moves, because it is the inner table by name."
+      ],
+      answer: 1,
+      why: "EVEN ignores values. Two large EVEN tables joined on a key are the usual DS_DIST_BOTH: both sides get reshuffled onto the join column."
+    }
+  ]
+});
+</script>
+</body>
+</html>

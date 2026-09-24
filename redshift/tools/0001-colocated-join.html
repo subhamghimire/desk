@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Colocated join</title>
+<link rel="stylesheet" href="../assets/redshift.css">
+<link rel="stylesheet" href="../../assets/teach.css">
+</head>
+<body>
+<nav class="t-back" hidden><a href="../index.html#tools">← All tools</a></nav>
+<h1>Colocated join</h1>
+<p class="lede">Given two dist styles and a join column, say whether rows move.</p>
+<div id="trainers"></div>
+<script src="../../assets/quiz.js"></script>
+<script src="../../assets/toolpage.js"></script>
+<script>
+TEACH.trainer("trainers", {
+  id: "l1-colocated-join",
+  title: "Does this join move rows?",
+  origin: { label: "Lesson 1 · Rows that meet should already share a slice",
+            href: "../lessons/0001-rows-on-the-same-slice.html" },
+  blurb: "Four joins. Pick the one the planner can do without a copy.",
+  mount: function (stage) {
+    stage.className = "quiz";
+    return TEACH.quiz(stage, {
+      items: [
+        {
+          id: "l1-same-key",
+          prompt: "orders and customers are both DISTKEY(customer_id). The join is ON c.customer_id = o.customer_id. What does the join do?",
+          choices: [
+            "No redistribution. Matching customer_ids already share a slice.",
+            "Broadcast customers to every slice.",
+            "Redistribute both tables on customer_id."
+          ],
+          answer: 0,
+          why: "Same dist key as the join column means the rows that match were placed together at load. EXPLAIN: DS_DIST_NONE."
+        },
+        {
+          id: "l1-other-column",
+          prompt: "Same two tables, both DISTKEY(customer_id). The join is ON c.email = o.email. What does the join do?",
+          choices: [
+            "No redistribution. Both tables are keyed, so any join is local.",
+            "Rows move. Equality of email was not the placement rule.",
+            "Nothing moves, because email is unique."
+          ],
+          answer: 1,
+          why: "DISTKEY only co-locates the column you named. A join on email still finds those rows on arbitrary slices, so the planner redistributes or broadcasts."
+        },
+        {
+          id: "l1-all",
+          prompt: "orders is DISTKEY(order_id). customers is DISTSTYLE ALL. Join ON c.customer_id = o.customer_id. What happens at query time?",
+          choices: [
+            "orders is redistributed onto customer_id.",
+            "No query-time copy. customers already exists on every node.",
+            "Both tables are broadcast."
+          ],
+          answer: 1,
+          why: "ALL paid for the copy at load. The join line should say DS_DIST_ALL_NONE. The fact table stays where it is."
+        },
+        {
+          id: "l1-even",
+          prompt: "orders and customers are both DISTSTYLE EVEN, and both are large. Join ON customer_id. What does the join do?",
+          choices: [
+            "No redistribution. EVEN spreads both tables the same way.",
+            "Rows move. EVEN does not keep equal customer_ids together.",
+            "Only customers moves, because it is the inner table by name."
+          ],
+          answer: 1,
+          why: "EVEN ignores values. Two large EVEN tables joined on a key are the usual DS_DIST_BOTH: both sides get reshuffled onto the join column."
+        }
+      ]
+    });
+  }
+});
+</script>
+</body>
+</html>

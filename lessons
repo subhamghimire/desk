@@ -41,8 +41,16 @@ import sys
 import tempfile
 from datetime import date
 
-HERE = os.path.dirname(os.path.abspath(__file__))
+# realpath, not abspath: `lessons` is usually a symlink in ~/.local/bin,
+# and abspath would search that directory instead of this repo.
+HERE = os.path.dirname(os.path.realpath(__file__))
 STATE_PATH = os.path.join(HERE, "state.json")
+if not os.path.isfile(STATE_PATH):
+    sys.stderr.write(
+        f"lessons: {HERE} is not the teaching repo (state.json missing).\n"
+        "The script is often a symlink; it must resolve that link before scanning.\n"
+    )
+    sys.exit(1)
 KIND_DIRS = (("lessons", "lesson"), ("reference", "ref"), ("projects", "project"))
 # Deliberately NOT a KIND_DIR: tools carry no state (docs/adr/0002-tools-are-stateless.md).
 TOOLS_DIR = "tools"
