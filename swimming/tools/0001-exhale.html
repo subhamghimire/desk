@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Exhale</title>
+<link rel="stylesheet" href="../assets/swimming.css">
+<link rel="stylesheet" href="../../assets/teach.css">
+</head>
+<body>
+<nav class="t-back" hidden><a href="../index.html#tools">← All tools</a></nav>
+<h1>Exhale</h1>
+<p class="lede">Face in the water. Say what the breath does, and what the hips do.</p>
+<div id="trainers"></div>
+<script src="../../assets/quiz.js"></script>
+<script src="../../assets/toolpage.js"></script>
+<script>
+TEACH.trainer("trainers", {
+  id: "s1-exhale",
+  title: "Where does the air go?",
+  origin: { label: "Lesson 1 · Blow the air out before you need more",
+            href: "../lessons/0001-blow-the-air-out.html" },
+  blurb: "Four moments in the water. Pick the one that keeps the hips up.",
+  mount: function (stage) {
+    stage.className = "quiz";
+    return TEACH.quiz(stage, {
+      items: [
+        {
+          id: "s1-held",
+          prompt: "You put your face in on a full breath and hold it until you need air. What happens next?",
+          choices: [
+            "You stay calm, because a full breath lasts longer.",
+            "You have to lift your head and gulp, and your hips drop.",
+            "The water holds you up as long as the breath is in."
+          ],
+          answer: 1,
+          why: "A held breath ends in a gasp. Lifting the head to gasp sinks the hips, so the next breath is worse."
+        },
+        {
+          id: "s1-blow",
+          prompt: "Your face is in the water. Where does the exhale happen?",
+          choices: [
+            "Into the water, the whole time the face is down.",
+            "After you lift your head, just before the inhale.",
+            "Only through the mouth, once the mouth is clear of the water."
+          ],
+          answer: 0,
+          why: "The blow happens face-down, so the inhale is one small turn instead of a rescue."
+        },
+        {
+          id: "s1-chin",
+          prompt: "You need air and you lift your chin toward the ceiling. What do the hips do?",
+          choices: [
+            "They stay up, because the lungs are full.",
+            "They drop. The head and the hips trade places.",
+            "Nothing. Breathing and body position are separate."
+          ],
+          answer: 1,
+          why: "The body rotates around its center. Chin up is hips down. Turn to the side instead of lifting."
+        },
+        {
+          id: "s1-turn",
+          prompt: "The lungs are nearly empty and the face is still in. What is the inhale?",
+          choices: [
+            "Stand up, breathe, then start again from the beginning.",
+            "A small turn until the mouth clears, one inhale, face back in.",
+            "A longer hold, so you can reach the wall first."
+          ],
+          answer: 1,
+          why: "Empty lungs plus a small turn is the whole skill. Standing up resets the panic instead of practicing past it."
+        }
+      ]
+    });
+  }
+});
+</script>
+</body>
+</html>

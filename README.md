@@ -9,8 +9,9 @@ lessons              CLI: what is active, and open it
 state.json           status only (active / done). The file list comes from disk.
 assets/              shared lesson engines
 site/                static build (python3 site/build.py → site/dist/)
+ongoing/             private subjects. Git keeps the README and ignores the rest.
 <subject>/
-  lessons/           0001-<name>.html — one thing each
+  lessons/           0001-<name>.html, one thing each
   reference/         cards and glossaries
   projects/          <yyyymmdd>-<name>/ with a plan and steps
   tools/             skill pages, replayable, no status
@@ -18,6 +19,8 @@ site/                static build (python3 site/build.py → site/dist/)
 ```
 
 Lessons and projects start active. Reference starts done. Tools are never tracked in `state.json`.
+
+Subjects you are happy to publish live next to this file (`redshift/`, `swimming/`). Subjects you want to keep on this machine go in `ongoing/<subject>/`, with the same layout. `lessons` opens both. Git tracks `ongoing/README.md` and ignores everything else in that folder. A lesson under `ongoing/` links the shared engines with `../../../assets/`, one level deeper than a published subject.
 
 ## Use
 

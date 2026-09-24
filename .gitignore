@@ -5,3 +5,8 @@ __pycache__/
 site/dist/
 .netlify
 .state-*.json
+
+# Private study. The README stays so the folder's purpose is visible on GitHub.
+ongoing/*
+!ongoing/.gitkeep
+!ongoing/README.md

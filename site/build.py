@@ -242,7 +242,12 @@ def esc(s):
 
 
 def pretty(subject):
-    return subject.replace("-", " ").title()
+    return os.path.basename(subject).replace("-", " ").title()
+
+
+def home_href(subject):
+    """Subject pages for ongoing/<name> sit two levels under dist/."""
+    return "../" * (subject.count("/") + 1) + "index.html"
 
 
 def display_title(it):
@@ -370,7 +375,7 @@ def build_subject(mod, subject, items, tools, state):
         return None
 
     title = pretty(subject)
-    body = ['<div class="nav"><a href="../index.html">← Home</a></div>',
+    body = ['<div class="nav"><a href="' + home_href(subject) + '">← Home</a></div>',
             "<h1>" + esc(title) + "</h1>",
             '<p class="sub">built ' + date.today().isoformat() + "</p>"]
     if len(shelves) > 1:

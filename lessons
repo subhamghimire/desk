@@ -160,15 +160,32 @@ def read_title(path, fallback):
     return html.unescape(" ".join(m.group(1).split()))
 
 
+def _is_subject(full):
+    dirs = [d for d, _ in KIND_DIRS] + [TOOLS_DIR]
+    return any(os.path.isdir(os.path.join(full, d)) for d in dirs)
+
+
 def subjects():
+    """Top-level subjects, plus private ones under ongoing/.
+
+    ongoing/ is gitignored apart from its README, so study that should stay
+    off GitHub still shows up in `lessons` on this machine.
+    """
     out = []
     for name in sorted(os.listdir(HERE)):
         full = os.path.join(HERE, name)
-        if not os.path.isdir(full) or name.startswith("."):
+        if not os.path.isdir(full) or name.startswith(".") or name == "ongoing":
             continue
-        dirs = [d for d, _ in KIND_DIRS] + [TOOLS_DIR]
-        if any(os.path.isdir(os.path.join(full, d)) for d in dirs):
+        if _is_subject(full):
             out.append(name)
+    ongoing = os.path.join(HERE, "ongoing")
+    if os.path.isdir(ongoing):
+        for name in sorted(os.listdir(ongoing)):
+            full = os.path.join(ongoing, name)
+            if not os.path.isdir(full) or name.startswith("."):
+                continue
+            if _is_subject(full):
+                out.append("ongoing/" + name)
     return out
 
 

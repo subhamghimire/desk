@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Blow the air out before you need more</title>
+<link rel="stylesheet" href="../assets/swimming.css">
+<link rel="stylesheet" href="../../assets/teach.css">
+</head>
+<body>
+<article>
+  <h1>Blow the air out before you need more</h1>
+  <p class="lede">Lesson 1. The gasp is what stands you up. The exhale is what lets you stay in.</p>
+
+  <p>A beginner holds a full breath, puts their face in, and waits until they need air. By then the only option is to lift the head and gulp. Lifting the head drops the hips, the legs sink, and the next breath is harder than the last. The panic is the breath being held, not the water.</p>
+
+  <p>The air has to leave while the face is still in. A steady blow through the nose or the mouth, the whole time the face is down. When the lungs are nearly empty, turn just far enough for one inhale, then put the face back and start blowing again. You never have to steal a breath in a hurry, because the old air is already gone.</p>
+
+  <h2>The move</h2>
+  <ul>
+    <li>Stand in water at chest depth. Hold the wall if you want it.</li>
+    <li>Face in. Blow out the whole time, a long "hmm" through the nose or a steady stream of bubbles.</li>
+    <li>Turn the head to the side until the mouth clears. One inhale. Not a lift of the chin.</li>
+    <li>Face back in before the inhale is spent, and blow again.</li>
+  </ul>
+
+  <p>Ten of those, unhurried, is the lesson. If the hips drop, the chin came up. Put the face back down and the hips follow.</p>
+
+  <div class="q">
+    <p>Before the drill: your face is in, and you are about to need air. What do you do with the air that is still in your lungs?</p>
+  </div>
+
+  <h2>Check</h2>
+  <div id="check" class="quiz"></div>
+</article>
+<script src="../../assets/quiz.js"></script>
+<script>
+TEACH.quiz(document.getElementById("check"), {
+  items: [
+    {
+      id: "s1-held",
+      prompt: "You put your face in on a full breath and hold it until you need air. What happens next?",
+      choices: [
+        "You stay calm, because a full breath lasts longer.",
+        "You have to lift your head and gulp, and your hips drop.",
+        "The water holds you up as long as the breath is in."
+      ],
+      answer: 1,
+      why: "A held breath ends in a gasp. Lifting the head to gasp sinks the hips, so the next breath is worse."
+    },
+    {
+      id: "s1-blow",
+      prompt: "Your face is in the water. Where does the exhale happen?",
+      choices: [
+        "Into the water, the whole time the face is down.",
+        "After you lift your head, just before the inhale.",
+        "Only through the mouth, once the mouth is clear of the water."
+      ],
+      answer: 0,
+      why: "The blow happens face-down, so the inhale is one small turn instead of a rescue."
+    },
+    {
+      id: "s1-chin",
+      prompt: "You need air and you lift your chin toward the ceiling. What do the hips do?",
+      choices: [
+        "They stay up, because the lungs are full.",
+        "They drop. The head and the hips trade places.",
+        "Nothing. Breathing and body position are separate."
+      ],
+      answer: 1,
+      why: "The body rotates around its center. Chin up is hips down. Turn to the side instead of lifting."
+    },
+    {
+      id: "s1-turn",
+      prompt: "The lungs are nearly empty and the face is still in. What is the inhale?",
+      choices: [
+        "Stand up, breathe, then start again from the beginning.",
+        "A small turn until the mouth clears, one inhale, face back in.",
+        "A longer hold, so you can reach the wall first."
+      ],
+      answer: 1,
+      why: "Empty lungs plus a small turn is the whole skill. Standing up resets the panic instead of practicing past it."
+    }
+  ]
+});
+</script>
+</body>
+</html>
