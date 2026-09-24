@@ -45,6 +45,9 @@ from datetime import date
 # and abspath would search that directory instead of this repo.
 HERE = os.path.dirname(os.path.realpath(__file__))
 STATE_PATH = os.path.join(HERE, "state.json")
+# Status for ongoing/ subjects. Git ignores this file; state.json stays publishable.
+ONGOING_STATE_PATH = os.path.join(HERE, "ongoing", "state.json")
+ONGOING_PREFIX = "ongoing/"
 if not os.path.isfile(STATE_PATH):
     sys.stderr.write(
         f"lessons: {HERE} is not the teaching repo (state.json missing).\n"
@@ -106,14 +109,14 @@ class Item:
         return os.path.join(HERE, self.subject, self.rel)
 
 
-def load_state():
+def _read_state_file(path, label):
     try:
-        with open(STATE_PATH, encoding="utf-8") as fh:
+        with open(path, encoding="utf-8") as fh:
             data = json.load(fh)
     except FileNotFoundError:
         return {"version": 1, "items": {}}
     except (json.JSONDecodeError, OSError) as exc:
-        sys.stderr.write(f"lessons: could not read state.json ({exc})\n")
+        sys.stderr.write(f"lessons: could not read {label} ({exc})\n")
         sys.stderr.write("lessons: continuing with defaults; nothing was overwritten.\n")
         return {"version": 1, "items": {}, "_readonly": True}
     data.setdefault("version", 1)
@@ -121,26 +124,57 @@ def load_state():
     return data
 
 
-def save_state(state):
-    if state.get("_readonly"):
-        sys.stderr.write("lessons: refusing to overwrite an unreadable state.json\n")
-        return False
-    payload = {k: v for k, v in state.items() if not k.startswith("_")}
-    payload["updated"] = date.today().isoformat()
-    # Write to a temp file in the same dir, then rename — an interrupted run
-    # can never leave a half-written state.json behind.
-    fd, tmp = tempfile.mkstemp(dir=HERE, prefix=".state-", suffix=".json")
+def load_state():
+    """Published status from state.json, private status from ongoing/state.json."""
+    root = _read_state_file(STATE_PATH, "state.json")
+    private = _read_state_file(ONGOING_STATE_PATH, "ongoing/state.json")
+    if root.get("_readonly") or private.get("_readonly"):
+        root["_readonly"] = True
+    stray = {}
+    merged = {}
+    for key, rec in root.get("items", {}).items():
+        if key.startswith(ONGOING_PREFIX):
+            stray[key] = rec
+        else:
+            merged[key] = rec
+    merged.update(stray)
+    merged.update(private.get("items", {}))
+    root["items"] = merged
+    # A private subject once written into state.json gets moved on the next read,
+    # so publishing state.json cannot publish ongoing study.
+    if stray and not root.get("_readonly"):
+        save_state(root)
+    return root
+
+
+def _write_state_file(path, items):
+    payload = {"version": 1, "items": items, "updated": date.today().isoformat()}
+    directory = os.path.dirname(path)
+    os.makedirs(directory, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=directory, prefix=".state-", suffix=".json")
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as fh:
             json.dump(payload, fh, indent=2, ensure_ascii=False)
             fh.write("\n")
-        os.replace(tmp, STATE_PATH)
+        os.replace(tmp, path)
     except OSError as exc:
-        sys.stderr.write(f"lessons: could not write state.json ({exc})\n")
+        sys.stderr.write(f"lessons: could not write {path} ({exc})\n")
         if os.path.exists(tmp):
             os.unlink(tmp)
         return False
     return True
+
+
+def save_state(state):
+    if state.get("_readonly"):
+        sys.stderr.write("lessons: refusing to overwrite an unreadable state file\n")
+        return False
+    items = state.get("items", {})
+    public = {k: v for k, v in items.items() if not k.startswith(ONGOING_PREFIX)}
+    private = {k: v for k, v in items.items() if k.startswith(ONGOING_PREFIX)}
+    # Write to a temp file in the same dir, then rename — an interrupted run
+    # can never leave a half-written state file behind.
+    return _write_state_file(STATE_PATH, public) and _write_state_file(ONGOING_STATE_PATH, private)
 
 
 TITLE_RE = re.compile(r"<title[^>]*>(.*?)</title>", re.I | re.S)

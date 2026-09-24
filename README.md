@@ -20,7 +20,7 @@ ongoing/             private subjects. Git keeps the README and ignores the rest
 
 Lessons and projects start active. Reference starts done. Tools are never tracked in `state.json`.
 
-Subjects you are happy to publish live next to this file (`redshift/`, `swimming/`). Subjects you want to keep on this machine go in `ongoing/<subject>/`, with the same layout. `lessons` opens both. Git tracks `ongoing/README.md` and ignores everything else in that folder. A lesson under `ongoing/` links the shared engines with `../../../assets/`, one level deeper than a published subject.
+Subjects you are happy to publish live next to this file (`redshift/`, `swimming/`). Subjects you want to keep on this machine go in `ongoing/<subject>/`, with the same layout. `lessons` opens both. Git tracks `ongoing/README.md` and ignores everything else in that folder, including `ongoing/state.json`, which holds status for those subjects. The published `state.json` does not. A lesson under `ongoing/` links the shared engines with `../../../assets/`, one level deeper than a published subject.
 
 ## Use
 

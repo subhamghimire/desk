@@ -12,6 +12,6 @@ ongoing/<subject>/
   MISSION.md  NOTES.md  RESOURCES.md
 ```
 
-`lessons` lists these beside the published subjects. Git ignores everything in this folder except this file and `.gitkeep`.
+`lessons` lists these beside the published subjects. Git ignores everything in this folder except this file and `.gitkeep`. Status for these subjects is `ongoing/state.json`, also ignored, so a private lesson never changes the published `state.json`.
 
 A lesson here is one directory deeper than `redshift/` or `swimming/`, so shared files are three levels up: `../../../assets/teach.css` and `../../../assets/quiz.js`. The subject stylesheet stays `../assets/<subject>.css`.
