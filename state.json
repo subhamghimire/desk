@@ -17,9 +17,14 @@
       "note": "Waiting on the four-breath drill in lesson 1. Next swimming lesson stays unwritten until that drill is done."
     },
     "swimming/lessons/0002-one-goggle-stays-in.html": {
-      "status": "active",
+      "status": "done",
       "updated": "2026-09-25",
       "note": "Waiting on eight rolls at the wall. One goggle stays in the water. Say whether both goggles came out."
+    },
+    "swimming/lessons/0003-blow-again-as-the-face-returns.html": {
+      "status": "active",
+      "updated": "2026-09-25",
+      "note": "Waiting on eight cycles at the wall. Bubbles start as the mouth meets the water. Say whether any return was quiet."
     }
   },
   "updated": "2026-09-25"

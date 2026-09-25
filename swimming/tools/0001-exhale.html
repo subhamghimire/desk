@@ -16,6 +16,53 @@
 <script src="../../assets/toolpage.js"></script>
 <script>
 TEACH.trainer("trainers", {
+  id: "s3-blow-again",
+  title: "Blow again as the face returns",
+  origin: { label: "Lesson 3 · Blow again as the face returns",
+            href: "../lessons/0003-blow-again-as-the-face-returns.html" },
+  blurb: "Eight cycles. A quiet face on the way back in does not count.",
+  mount: function (stage) {
+    stage.className = "quiz";
+    return TEACH.quiz(stage, {
+      items: [
+        {
+          id: "s3-when",
+          prompt: "The inhale is done and the face is rolling back in. When does the next blow start?",
+          choices: [
+            "As the mouth meets the water, with no pause between.",
+            "After a short hold, once the new breath feels settled.",
+            "Only when the lungs are empty and you need air again."
+          ],
+          answer: 0,
+          why: "The exchange does not stop. A pause with full lungs is a held breath, and a held breath ends in a gasp."
+        },
+        {
+          id: "s3-quiet",
+          prompt: "The face is back in and the water in front of your mouth is quiet. What is that pause?",
+          choices: [
+            "A rest. Full lungs are what keep the hips up.",
+            "A hold. The old panic, one breath later than before.",
+            "The drill. You blow only when the lungs are nearly empty."
+          ],
+          answer: 1,
+          why: "Quiet water means the new air is being kept. Start the bubbles as the mouth goes under."
+        },
+        {
+          id: "s3-count",
+          prompt: "One of the eight cycles comes back in and waits before the bubbles. What do you do?",
+          choices: [
+            "Count it, because the face did return to the water.",
+            "Skip it, and start the blow as the mouth goes under.",
+            "Stand up, breathe, and begin the set from the wall."
+          ],
+          answer: 1,
+          why: "The rep is bubbles on the way back in. A quiet return is a hold, and a hold does not count."
+        }
+      ]
+    });
+  }
+});
+TEACH.trainer("trainers", {
   id: "s2-one-goggle",
   title: "One goggle stays in",
   origin: { label: "Lesson 2 · One goggle stays in the water",
