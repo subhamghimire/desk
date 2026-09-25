@@ -16,6 +16,53 @@
 <script src="../../assets/toolpage.js"></script>
 <script>
 TEACH.trainer("trainers", {
+  id: "s2-one-goggle",
+  title: "One goggle stays in",
+  origin: { label: "Lesson 2 · One goggle stays in the water",
+            href: "../lessons/0002-one-goggle-stays-in.html" },
+  blurb: "Eight rolls. The one that brings both goggles out does not count.",
+  mount: function (stage) {
+    stage.className = "quiz";
+    return TEACH.quiz(stage, {
+      items: [
+        {
+          id: "s2-roll",
+          prompt: "The lungs are nearly empty and you need air. What moves?",
+          choices: [
+            "The chin lifts until the mouth clears.",
+            "The body rolls until one goggle stays.",
+            "You stand and breathe beside the wall."
+          ],
+          answer: 1,
+          why: "The mouth clears because the body rolled. A lifted chin is a different move, and it sinks the hips."
+        },
+        {
+          id: "s2-both",
+          prompt: "Both goggles come out of the water on the breath. What did the hips do?",
+          choices: [
+            "They stayed up because the lungs were full.",
+            "They dropped because the head had come up.",
+            "They stayed put because the head only turned."
+          ],
+          answer: 1,
+          why: "Both goggles out means the chin came up. Chin up and hips down are the same motion."
+        },
+        {
+          id: "s2-count",
+          prompt: "One of the eight rolls brings both goggles out. What do you do with that one?",
+          choices: [
+            "Count it, because the mouth did clear.",
+            "Skip it, and roll that breath again.",
+            "Stop there and rest on the wall."
+          ],
+          answer: 1,
+          why: "The rep is the goggle staying in, not the inhale. A lift does not count as the roll."
+        }
+      ]
+    });
+  }
+});
+TEACH.trainer("trainers", {
   id: "s1-exhale",
   title: "Where does the air go?",
   origin: { label: "Lesson 1 · Blow the air out before you need more",

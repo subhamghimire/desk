@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>One goggle stays in the water</title>
+<link rel="stylesheet" href="../assets/swimming.css">
+<link rel="stylesheet" href="../../assets/teach.css">
+</head>
+<body>
+<article>
+  <h1>One goggle stays in the water</h1>
+  <p class="lede">Lesson 2. The inhale is a roll, not a lift. One goggle stays under.</p>
+
+  <p>Lesson 1 got the air out while your face was down. The inhale is the next half of the same breath. You do not look up to find it. You roll until the mouth clears, and you stop while one goggle is still in the water. If both goggles come out, the chin came up, and the hips drop.</p>
+
+  <p><a href="https://www.totalimmersion.net/blog/seamless-breathing/">Total Immersion</a> teaches the breath as one goggle above the surface, head still in line with the spine. <a href="https://www.usms.org/fitness-and-training/guides/freestyle/breathing">U.S. Masters Swimming</a> says the same thing from the other end: lifting the head sinks the hips. This lesson is that cue, standing still. Kicking and pulling wait.</p>
+
+  <h2>The move</h2>
+  <ul>
+    <li>Chest-deep water. Both hands on the wall, or holding the gutter.</li>
+    <li>Face in. Blow out the whole time, the same blow as <a href="0001-blow-the-air-out.html">lesson 1</a>.</li>
+    <li>When the lungs are nearly empty, roll your shoulder toward the ceiling until the mouth clears. One goggle stays in the water. One inhale.</li>
+    <li>Roll the face back in before that breath is spent, and blow again.</li>
+  </ul>
+
+  <p>Eight of those. If both goggles come out, that one does not count. Put the face back and roll less.</p>
+
+  <div class="q">
+    <p>Before you start: which goggle is still in the water at the moment you inhale?</p>
+  </div>
+
+  <h2>Check</h2>
+  <div id="check" class="quiz"></div>
+
+  <p>The same check sits on the <a href="../tools/0001-exhale.html#s2-one-goggle">exhale skill page</a>. Ask if the roll is unclear. The next lesson waits until you have done the eight.</p>
+</article>
+<script src="../../assets/quiz.js"></script>
+<script>
+TEACH.quiz(document.getElementById("check"), {
+  items: [
+    {
+      id: "s2-roll",
+      prompt: "The lungs are nearly empty and you need air. What moves?",
+      choices: [
+        "The chin lifts until the mouth clears.",
+        "The body rolls until one goggle stays.",
+        "You stand and breathe beside the wall."
+      ],
+      answer: 1,
+      why: "The mouth clears because the body rolled. A lifted chin is a different move, and it sinks the hips."
+    },
+    {
+      id: "s2-both",
+      prompt: "Both goggles come out of the water on the breath. What did the hips do?",
+      choices: [
+        "They stayed up because the lungs were full.",
+        "They dropped because the head had come up.",
+        "They stayed put because the head only turned."
+      ],
+      answer: 1,
+      why: "Both goggles out means the chin came up. Chin up and hips down are the same motion."
+    },
+    {
+      id: "s2-count",
+      prompt: "One of the eight rolls brings both goggles out. What do you do with that one?",
+      choices: [
+        "Count it, because the mouth did clear.",
+        "Skip it, and roll that breath again.",
+        "Stop there and rest on the wall."
+      ],
+      answer: 1,
+      why: "The rep is the goggle staying in, not the inhale. A lift does not count as the roll."
+    }
+  ]
+});
+</script>
+</body>
+</html>
